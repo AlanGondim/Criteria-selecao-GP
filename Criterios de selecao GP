@@ -1,0 +1,326 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from math import pi
+
+# --- 1. Definição dos Critérios, Pilares e Perguntas ---
+CRITERIOS = {
+    "P1_Experiencia_Perfil": {
+        "label": "1. Experiência e Perfil",
+        "max_score": 42,
+        "questions": {
+            # --- Q1: PADRONIZADA APENAS COM CHAVES DE LETRAS A/B/C ---
+            "Q1": {"text": "Q1. Qual a sua alocação de tempo (em %) em projetos/programas ativos nos próximos 6 meses?\n(A) 80 - 100% \n(B) 50 - 79% \n(C) <50%", 
+                   "type": "choice", 
+                   "max": 5, 
+                   "mapping": {"A": 5, "B": 3, "C": 1}, 
+                   "options": ["A", "B", "C"]}, 
+            
+            # --- Q2: PADRONIZADO PARA MAIÚSCULAS ---
+            "Q2": {"text": "Q2. Você possui planos de férias ou ausências significativas (> 5 dias úteis) no período de go-live (fase final) de um Programa (próximos 12 meses)?", 
+                   "type": "choice", 
+                   "max": 5, 
+                   "mapping": {"N": 5, "S": 0}, 
+                   "options": ["S", "N"]},
+                   
+            "Q3": {"text": "Q3. Qual o seu nível de prontidão para assumir um novo Programa de implantação de grande porte em 30 dias? (Escala 1 a 5)", "type": "scale", "max": 5, "options": [1, 2, 3, 4, 5]},
+            
+            # --- Q4: PADRONIZADO PARA MAIÚSCULAS ---
+            "Q4": {"text": "Q4. Você já gerenciou Programas/Projetos que envolviam a coordenação de 3 ou mais projetos simultâneos e interligados?", 
+                   "type": "choice", 
+                   "max": 5, 
+                   "mapping": {"S": 5, "N": 0}, 
+                   "options": ["S", "N"]},
+                   
+            # --- Q5: ALTERADA PARA 'value_input' (ENTRADA NUMÉRICA) ---
+            "Q5": {"text": "Q5. Qual o maior valor de contrato (Programa ou Projeto) que você já gerenciou na área de Saúde? (Insira o valor em Milhões de Reais, ex: 1.5 para 1 milhão e meio)", 
+                   "type": "value_input", 
+                   "max": 5, 
+                   "cutoff_milhoes": 1.0}, # Ponto de corte: 1 Milhão para pontuação máxima
+                   
+            "Q6": {"text": "Q6. Em uma escala de 1 a 5, quão confortável você se sente em gerenciar riscos de terceiros (vendors)?", "type": "scale", "max": 5, "options": [1, 2, 3, 4, 5]},
+            
+            # --- Q7: PADRONIZADO PARA MAIÚSCULAS ---
+            "Q7": {
+                "text": "Q7. Há quantos anos você atua na gestão de Programas ou Projetos de implantação de Sistemas de Gestão Hospitalar (HIS/EHR, ex: MV, Tasy, Soul)?\n(A) >= 5 anos \n(B) Entre 3 e 4 anos \n(C) < 3 anos", 
+                "type": "choice",
+                "max": 5, 
+                "mapping": {"A": 5, "B": 3, "C": 1}, 
+                "options": ["A", "B", "C"]
+            },
+            
+            # --- Q8: MANTIDA ---
+            "Q8": {
+                "text": "Q8. Qual a certificação de gerenciamento de programas/projetos mais avançada que você possui?\n(A) PgMP - Program Management Professional: Foco em gestão de Programas e alinhamento estratégico.\n(B) PMP - Project Management Professional: Foco em gestão de Projetos.\n(C) CSM/PSM - Certified/Professional Scrum Master: Foco em métodos Ágeis/Gestão de Projetos.\n(D) Nenhuma: Não possui certificação formal.",
+                "type": "choice", 
+                "max": 7, 
+                "mapping": {"A": 7, "B": 5, "C": 3, "D": 0},
+                "options": ["A", "B", "C", "D"]
+            },
+        }
+    },
+    "P2_Conhecimento_Tecnico": {
+        "label": "2. Conhecimento Técnico",
+        "max_score": 14,
+        "questions": {
+            "Q9": {"text": "Q9. Quantos módulos MV/HIS (PEP, Faturamento, Custos, Suprimentos) você já liderou a implantação completa (*full-cycle* com *go-live*)? (Número de módulos)", "type": "multi_select", "max": 4, "value_per_item": 1},
+            "Q10": {
+                "text": "Q10. Qual é a principal diferença entre a gestão de Programas e a gestão de Projetos segundo o PMI?\n(A) Projetos foca na entrega de benefícios, enquanto Programas foca em escopo e prazo.\n(B) Programas foca na obtenção de benefícios e no alinhamento estratégico, enquanto Projetos foca nas entregas específicas e no escopo.\n(C) Programas usam metodologias Ágeis e Projetos usam metodologias Preditivas (Waterfall).\n(D) Não há diferença significativa; é apenas uma questão de escala.",
+                "type": "choice", 
+                "max": 5, 
+                "mapping": {"A": 0, "B": 5, "C": 0, "D": 0},
+                "options": ["A", "B", "C", "D"]
+            },
+            "Q11": {
+                "text": "Q11. Em um Programa MV, qual artefato é essencial para gerenciar a sobreposição de recursos e os prazos críticos entre projetos interdependentes?\n(A) WBS (Estrutura Analítica do Projeto) do Projeto de Faturamento.\n(B) Matriz de Interdependências e Cronograma Mestre Integrado do Programa.\n(C) Plano de Comunicação e o Log de Riscos Apenas.\n(D) Log de Stakeholders do Programa.",
+                "type": "choice", 
+                "max": 5, 
+                "mapping": {"A": 0, "B": 5, "C": 0, "D": 0},
+                "options": ["A", "B", "C", "D"]
+            },
+        }
+    },
+    "P3_Governanca_Comportamental": {
+        "label": "3. Governança e Comportamento",
+        "max_score": 20,
+        "questions": {
+            "Q12": {
+                "text": "Q12. Qual é o papel principal do Comitê Diretivo em um Programa de implantação hospitalar?\n(A) Realizar o treinamento dos usuários finais do hospital.\n(B) Gerenciar o escopo técnico diário de cada projeto.\n(C) Aprovar ou rejeitar mudanças de escopo que impactam o orçamento global do Programa e resolver questões estratégicas escaladas (Exercer Autoridade Máxima).\n(D) Aprovar as especificações técnicas de integração de sistemas.",
+                "type": "choice", 
+                "max": 5, 
+                "mapping": {"A": 0, "B": 0, "C": 5, "D": 0},
+                "options": ["A", "B", "C", "D"]
+            },
+            "Q13": {
+                "text": "Q13. Sua PRIMEIRA ação ao identificar que um projeto crítico (ex: Faturamento) está em atraso, com impacto no go-live, seria:\n(A) Realizar uma análise de *Root Cause* e negociar imediatamente um plano de recuperação com o Gerente do Projeto e o Sponsor interno.\n(B) Agendar reunião com a Diretoria Executiva do hospital para negociar recursos adicionais.\n(C) Alterar o Cronograma Mestre do Programa para refletir o novo prazo de go-live.\n(D) Enviar um e-mail formal para a equipe de Faturamento pedindo para que trabalhem horas extras.",
+                "type": "choice", 
+                "max": 5, 
+                "mapping": {"A": 5, "B": 0, "C": 0, "D": 0},
+                "options": ["A", "B", "C", "D"]
+            },
+            "Q14": {
+                "text": "Q14. Sua principal abordagem para engajamento e mitigação de resistência à mudança por parte do corpo clínico (médicos e enfermeiros) seria:\n(A) Criar um plano de comunicação intensivo com e-mails semanais sobre o progresso do Programa.\n(B) Criar sessões de treinamento modulares, curtas, *on-demand* (vídeos) e designar médicos-líderes (*champions*) para promover a adesão.\n(C) Exigir que todos participem de um treinamento presencial obrigatório de 8 horas antes do go-live.\n(D) Focar exclusivamente no treinamento da equipe de TI.",
+                "type": "choice", 
+                "max": 5, 
+                "mapping": {"A": 0, "B": 5, "C": 0, "D": 0},
+                "options": ["A", "B", "C", "D"]
+            },
+            "Q15": {
+                "text": "Q15. Ao mediar um conflito técnico complexo (ex: requisitos de um *workflow*), sua primeira ação seria:\n(A) Analisar os requisitos e a documentação técnica (*Design Blueprint*) para determinar objetivamente a melhor solução alinhada ao escopo base.\n(B) Escalar o problema imediatamente para o Comitê Diretivo pedindo que um Diretor decida.\n(C) Optar pela solução proposta pela equipe de TI, pois são os especialistas em sistemas.\n(D) Realizar uma votação entre os *stakeholders* envolvidos para determinar a solução mais popular.",
+                "type": "choice", 
+                "max": 5, 
+                "mapping": {"A": 5, "B": 0, "C": 0, "D": 0},
+                "options": ["A", "B", "C", "D"]
+            },
+        }
+    }
+}
+
+# --- 1.1. Definição da Pontuação Alvo (Meta) ---
+PONTUACAO_ALVO_PERCENTUAL = 85.0
+
+# --- 2. Função de Coleta de Respostas do Usuário (Original/Interativa com Validação) ---
+def coletar_respostas(criterios):
+    respostas = {}
+    print("--- 📝 INÍCIO DO QUESTIONÁRIO DE AVALIAÇÃO DE GERENTE DE PROGRAMAS MV ---")
+    
+    for pilar, dados_pilar in criterios.items():
+        print(f"\n## {dados_pilar['label'].upper()}")
+        
+        for q_id, q_data in dados_pilar['questions'].items():
+            print(f"\n{q_data['text']}")
+            
+            # --- Lógica de Validação para cada tipo de questão ---
+            
+            if q_data["type"] == "choice":
+                # Lógica para determinar as opções válidas (keys do mapping)
+                opcoes_validas = list(q_data['mapping'].keys())
+                options_str = " / ".join(opcoes_validas)
+                
+                while True:
+                    resposta_raw = input(f"Selecione uma opção válida ({options_str}): ")
+                    # 1. Converte a entrada para MAIÚSCULAS
+                    resposta = resposta_raw.upper()
+                    
+                    # 2. Verifica se a resposta (agora maiúscula) está nas opções válidas (que estão em maiúsculas)
+                    if resposta in opcoes_validas:
+                        respostas[q_id] = resposta
+                        break
+                    
+                    print(f"❌ Resposta inválida. Por favor, escolha uma das seguintes opções: {options_str}")
+            
+            elif q_data["type"] == "scale":
+                min_val, max_val = 1, q_data['max']
+                options_str = f"{min_val} a {max_val}"
+                while True:
+                    try:
+                        resposta_str = input(f"Resposta (Escala de {options_str}): ")
+                        resposta = int(resposta_str) # Tenta converter para inteiro
+                        if min_val <= resposta <= max_val:
+                            respostas[q_id] = resposta
+                            break
+                        else:
+                            print(f"❌ Resposta inválida. Por favor, insira um número entre {min_val} e {max_val}.")
+                    except ValueError:
+                        print("❌ Entrada inválida. Por favor, insira um número inteiro.")
+            
+            elif q_data["type"] == "multi_select":
+                min_val, max_val = 0, q_data['max']
+                options_str = f"0 a {max_val} (Contagem de módulos)"
+                while True:
+                    try:
+                        resposta_str = input(f"Número de itens selecionados (Máx {max_val}): ")
+                        resposta = int(resposta_str) # Tenta converter para inteiro
+                        if min_val <= resposta <= max_val:
+                            respostas[q_id] = resposta
+                            break
+                        else:
+                            print(f"❌ Resposta inválida. Por favor, insira um número entre {min_val} e {max_val}.")
+                    except ValueError:
+                        print("❌ Entrada inválida. Por favor, insira um número inteiro.")
+            
+            # --- NOVO BLOCO DE VALIDAÇÃO PARA 'value_input' (Q5) ---
+            elif q_data["type"] == "value_input":
+                while True:
+                    try:
+                        resposta_str = input("Insira o valor em milhões de reais (ex: 1.5): ")
+                        resposta = float(resposta_str.replace(',', '.')) # Aceita vírgula ou ponto
+                        respostas[q_id] = resposta
+                        break
+                    except ValueError:
+                        print("❌ Entrada inválida. Por favor, insira um valor numérico (pode usar ponto ou vírgula).")
+                        
+            elif q_data["type"] == "correct_answer":
+                opcoes_validas = ["S", "N"]
+                options_str = " / ".join(opcoes_validas)
+                while True:
+                    # Já é padronizado para maiúsculas
+                    resposta_str = input(f"A afirmação é correta para você? ({options_str}): ").upper()
+                    if resposta_str in opcoes_validas:
+                        respostas[q_id] = (resposta_str == "S")
+                        break
+                    else:
+                        print(f"❌ Entrada inválida. Digite 'S' para Sim ou 'N' para Não.")
+                        
+    print("\n--- ✅ QUESTIONÁRIO CONCLUÍDO ---")
+    return respostas
+
+# --- 3. Implementação da Lógica de Scoring ---
+def calcular_score(respostas, criterios):
+    """Calcula a pontuação em cada pilar e retorna em percentual."""
+    scores = {}
+    
+    for pilar, dados_pilar in criterios.items():
+        score_obtido = 0
+        
+        for q_id, q_data in dados_pilar['questions'].items():
+            resposta = respostas.get(q_id)
+            
+            if resposta is None:
+                continue
+
+            if q_data["type"] == "choice":
+                # A pontuação funciona porque a resposta já foi normalizada para maiúsculas na coleta
+                score_obtido += q_data["mapping"].get(resposta, 0)
+            
+            elif q_data["type"] == "scale":
+                if isinstance(resposta, int):
+                    score_obtido += max(1, min(resposta, q_data["max"]))
+            
+            elif q_data["type"] == "multi_select":
+                if isinstance(resposta, int):
+                    score_obtido += min(resposta * q_data["value_per_item"], q_data["max"])
+
+            # --- Lógica de Pontuação para 'value_input' (Q5) ---
+            elif q_data["type"] == "value_input":
+                if isinstance(resposta, (int, float)):
+                    cutoff = q_data.get("cutoff_milhoes", 1.0) # Assume 1.0 se não estiver definido
+                    if resposta >= cutoff:
+                        score_obtido += q_data["max"] # 5 pontos
+            
+            elif q_data["type"] == "correct_answer":
+                if resposta is True:
+                    score_obtido += q_data["max"]
+
+        score_percentual = (score_obtido / dados_pilar['max_score']) * 100
+        scores[pilar] = {"score": score_obtido, "max": dados_pilar['max_score'], "percentual": round(score_percentual, 1)}
+        
+    return scores
+
+# --- 4. Implementação do Plotting (Mantido Inalterado) ---
+def plot_radar_chart(resultados, criterios, target_percentual):
+    """Gera o gráfico de radar das competências com destaque neon e meta."""
+    
+    pilares = list(resultados.keys())
+    labels_pilares = [criterios[pilar]['label'] for pilar in pilares]
+    scores_avaliado = [resultados[pilar]['percentual'] for pilar in pilares]
+    
+    N = len(pilares)
+    angles = [n / float(N) * 2 * pi for n in range(N)]
+    angles += angles[:1]
+    
+    # Preparação dos dados para plotagem
+    scores_avaliado_plot = scores_avaliado + scores_avaliado[:1]
+    scores_alvo_plot = [target_percentual] * (N + 1)
+    
+    # Cria a figura com fundo escuro para realçar o neon
+    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(polar=True))
+    fig.patch.set_facecolor('#1e1e1e')
+    ax.set_facecolor('#1e1e1e')
+    
+    # Cores Neon
+    COLOR_AVALIADO = '#FF6600'
+    COLOR_ALVO = '#00FFFF' 
+    
+    # --- Plotar Pontuação Alvo (Meta) ---
+    ax.plot(angles, scores_alvo_plot, linewidth=2, linestyle='--', label=f'Meta ({target_percentual}%)', color=COLOR_ALVO)
+    
+    # --- Plotar Pontuação do Avaliado ---
+    ax.plot(angles, scores_avaliado_plot, linewidth=3, linestyle='solid', label='Pontuação Avaliado', color=COLOR_AVALIADO)
+    ax.fill(angles, scores_avaliado_plot, COLOR_AVALIADO, alpha=0.3)
+    
+    # --- Configurações de Aparência ---
+    ax.tick_params(colors='white') 
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels_pilares, size=14, color='white', weight='bold')
+    
+    # Eixo Y (Score)
+    ax.set_yticks(np.arange(0, 101, 25))
+    ax.set_yticklabels([f"{i}%" for i in np.arange(0, 101, 25)], color="grey", size=10)
+    ax.set_ylim(0, 100)
+    
+    # Posição do Gráfico
+    ax.set_theta_offset(pi / 2)
+    ax.set_theta_direction(-1)
+    
+    # Título
+    ax.set_title("Radar chart | Critérios de Seleção do Gerente de Programa", size=18, y=1.1, color='white', weight='bold')
+    ax.legend(loc='lower left', bbox_to_anchor=(0.8, 0.95), frameon=True, facecolor='#333333', edgecolor='white', labelcolor='white')
+
+    # Adiciona a pontuação em texto próximo ao ponto
+    for angle, score in zip(angles[:-1], scores_avaliado):
+        ax.text(angle, score + 4, f'{score:.1f}%', size=11, weight='bold', ha='center', va='center', color=COLOR_AVALIADO)
+    
+    plt.savefig('radar_competencias_avaliado_neon.png', facecolor=fig.get_facecolor())
+    plt.show()
+
+# --- 5. Função Principal de Execução (REATIVADA) ---
+def main():
+    # Coleta as respostas do usuário de forma interativa (requer input no terminal)
+    respostas_usuario = coletar_respostas(CRITERIOS)
+    
+    # Calcula a pontuação
+    resultados = calcular_score(respostas_usuario, CRITERIOS)
+    
+    print("\n--- RESULTADOS GERAIS ---")
+    for pilar, res in resultados.items():
+        print(f"Pilar {CRITERIOS[pilar]['label']}: {res['percentual']}% (Score: {res['score']}/{res['max']})")
+
+    # Plota o Radar Chart
+    plot_radar_chart(resultados, CRITERIOS, PONTUACAO_ALVO_PERCENTUAL)
+    
+    print("\nO gráfico radar foi gerado e salvo como 'radar_competencias_avaliado_neon.png'.")
+
+# Execução do programa
+if __name__ == "__main__":
+    main()
